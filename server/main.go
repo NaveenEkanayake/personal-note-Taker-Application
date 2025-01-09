@@ -1,153 +1,264 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/joho/godotenv" // Make sure to import godotenv
+	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type Note struct {
-	ID      int    `json:"id"`
-	Title   string `json:"title"`
-	Content string `json:"content"`
+type personalnote struct {
+	ID      primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	Title   string             `json:"title"`
+	Content string             `json:"content"`
 }
 
-// Slice to hold notes
-var personalNotes = []*Note{}
+var collection *mongo.Collection
 
 func main() {
-
 	app := fiber.New()
 
-	// Load the .env file
+	// Load environment variables
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Fatal("Error loading .env file:", err)
 	}
 
-	// Get the PORT from the .env file
 	PORT := os.Getenv("PORT")
+	MONGO_DB_URL := os.Getenv("MONGO_DB_URL")
 
-	// If PORT is not set, use the default port
-	if PORT == "" {
-		PORT = "3000" // default to 3000 if not found
+	// MongoDB client setup
+	clientOptions := options.Client().ApplyURI(MONGO_DB_URL)
+	client, err := mongo.Connect(context.Background(), clientOptions)
+	if err != nil {
+		log.Fatal("Error connecting to MongoDB:", err)
+	}
+	defer client.Disconnect(context.Background())
+
+	// Ping the MongoDB server to confirm connection
+	err = client.Ping(context.Background(), nil)
+	if err != nil {
+		log.Fatal("Error pinging MongoDB:", err)
 	}
 
-	// Define a route for GET request
-	app.Get("/api/getall", func(c *fiber.Ctx) error {
-		return c.Status(200).JSON(fiber.Map{
-			"mesg":          "Personal notes Retrieval Successful",
-			"personalNotes": personalNotes,
-		})
-	})
+	// Accessing the MongoDB collection
+	collection = client.Database("Personal-note_Taker").Collection("personalnote")
+	fmt.Printf("Connected to MongoDB on port %s\n", PORT)
 
-	app.Post("/api/addnote", func(c *fiber.Ctx) error {
-		personalNote := &Note{} // Create a pointer to the Note struct
-		if err := c.BodyParser(personalNote); err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Invalid request body",
+	// Define routes
+	app.Get("/api/getnote", GetNote)
+	app.Get("/api/getnote/:id", GetNoteByID)
+	app.Post("/api/addnote", AddNote)
+	app.Put("/api/updatenote/:id", updateNote)
+	app.Delete("/api/deletenote/:id", deleteNote)
+
+	// Start the Fiber app
+	log.Fatal(app.Listen(fmt.Sprintf(":%s", PORT)))
+}
+
+func GetNote(c *fiber.Ctx) error {
+	var personalnotes []personalnote
+
+	// Find all notes in the collection
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Error retrieving notes",
+			"error":   err.Error(),
+		})
+	}
+	defer cursor.Close(context.Background()) // Ensure cursor is closed after iteration
+
+	// Iterate over the cursor to decode the notes
+	for cursor.Next(context.Background()) {
+		var personalnote personalnote
+		if err := cursor.Decode(&personalnote); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"message": "Error decoding note",
+				"error":   err.Error(),
 			})
 		}
-		if personalNote.Title == "" {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Personal Note Title is required",
-			})
-		}
-		if personalNote.Content == "" {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Personal Note Content is required",
-			})
-		}
-		personalNote.ID = len(personalNotes) + 1
-		personalNotes = append(personalNotes, personalNote)
-		return c.Status(201).JSON(fiber.Map{
-			"msg":          "Personal Note Added Successfully",
-			"personalNote": personalNote,
+		personalnotes = append(personalnotes, personalnote)
+	}
+
+	// Check if no personal notes exist
+	if len(personalnotes) == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"message": "No personal notes exist",
 		})
+	}
+
+	// Return the retrieved notes
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":       "Notes retrieved successfully!",
+		"retrievedData": personalnotes,
 	})
+}
 
-	// Update an existing note
-	app.Put("/api/updateNote/:id", func(c *fiber.Ctx) error {
-		// Get the ID from the URL parameters
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Invalid note ID",
-			})
-		}
+func GetNoteByID(c *fiber.Ctx) error {
+    // Get the ID from the request parameters
+    id := c.Params("id")
 
-		// Find the note by ID
-		for i, personalNote := range personalNotes {
-			if personalNote.ID == id {
-				// Parse the updated data
-				updatedNote := &Note{}
-				if err := c.BodyParser(updatedNote); err != nil {
-					return c.Status(400).JSON(fiber.Map{
-						"error": "Invalid request body",
-					})
-				}
+    // Convert the ID string to a MongoDB ObjectID
+    objectID, err := primitive.ObjectIDFromHex(id)
+    if err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "error": "Invalid note ID",
+        })
+    }
 
-				// Validate updated data
-				if updatedNote.Title == "" {
-					return c.Status(400).JSON(fiber.Map{
-						"error": "Title is required",
-					})
-				}
-				if updatedNote.Content == "" {
-					return c.Status(400).JSON(fiber.Map{
-						"error": "Content is required",
-					})
-				}
+    // Define the filter to search for the note
+    filter := bson.M{"_id": objectID}
 
-				// Update the note
-				personalNotes[i].Title = updatedNote.Title
-				personalNotes[i].Content = updatedNote.Content
+    // Create a variable to hold the result
+    var personalnote personalnote
 
-				return c.Status(200).JSON(fiber.Map{
-					"msg":          "Personal Note Updated Successfully",
-					"personalNote": personalNotes[i],
-				})
-			}
-		}
+    // Query the MongoDB collection
+    err = collection.FindOne(context.Background(), filter).Decode(&personalnote)
+    if err != nil {
+        if err == mongo.ErrNoDocuments {
+            return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+                "message": "Note not found",
+            })
+        }
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "error": "Error retrieving the note",
+            "details": err.Error(),
+        })
+    }
 
-		// If note not found
-		return c.Status(404).JSON(fiber.Map{
-			"error": "Note not found",
+    // Return the found note
+    return c.Status(fiber.StatusOK).JSON(fiber.Map{
+        "message": "Note retrieved successfully!",
+        "note":    personalnote,
+    })
+}
+
+
+func AddNote(c *fiber.Ctx) error {
+	// Parse the request body into the personalnote struct
+	personalnote := new(personalnote)
+	if err := c.BodyParser(personalnote); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to parse request body",
 		})
-	})
+	}
 
-	// Delete an existing note
-	app.Delete("/api/DeleteNote/:id", func(c *fiber.Ctx) error {
-		id := c.Params("id")
-
-		// Loop through the notes to find the matching ID
-		for i, personalNote := range personalNotes {
-			// Convert the string id to an integer for proper comparison
-			if fmt.Sprintf("%d", personalNote.ID) == id {
-				// Save the deleted note for the response
-				deletedNote := personalNotes[i]
-
-				// Remove the note by appending slices
-				personalNotes = append(personalNotes[:i], personalNotes[i+1:]...)
-
-				// Return a success message with the deleted note
-				return c.Status(200).JSON(fiber.Map{
-					"msg":         "Personal Note Deleted Successfully",
-					"deletedNote": deletedNote,
-				})
-			}
-		}
-
-		// If the note is not found, return an error
-		return c.Status(404).JSON(fiber.Map{
-			"error": "Note not found",
+	// Validate required fields
+	if personalnote.Title == "" || personalnote.Content == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "All fields are required",
 		})
-	})
+	}
 
-	// Start the app on the port specified in the .env file
-	log.Fatal(app.Listen(":" + PORT))
+	// Insert the personalnote into the MongoDB collection
+	insertResult, err := collection.InsertOne(context.Background(), personalnote)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to insert note into database",
+			"message": err.Error(),
+		})
+	}
+
+	// Assign the inserted ID back to the personalnote struct
+	personalnote.ID = insertResult.InsertedID.(primitive.ObjectID)
+
+	// Return the newly created note
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"message": "Note added successfully",
+		"note":    personalnote,
+	})
+}
+
+func updateNote(c *fiber.Ctx) error {
+	// Get the ID from the URL parameters
+	id := c.Params("id")
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid personal note ID",
+		})
+	}
+
+	// Parse the request body for the update data
+	updatedData := new(personalnote)
+	if err := c.BodyParser(updatedData); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to parse request body",
+		})
+	}
+
+	// Create the filter and update document
+	filter := bson.M{"_id": objectID}
+	update := bson.M{
+		"$set": bson.M{
+			"title":   updatedData.Title,
+			"content": updatedData.Content,
+		},
+	}
+
+	// Perform the update operation
+	result, err := collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to update the personal note",
+			"message": err.Error(),
+		})
+	}
+
+	// Check if any document was modified
+	if result.MatchedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "No note found with the given ID",
+		})
+	}
+
+	// Return success response
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":      "Note updated successfully",
+		"updatingdata": update,
+	})
+}
+
+func deleteNote(c *fiber.Ctx) error {
+	// Get the ID from the URL parameters
+	id := c.Params("id")
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid personal note ID",
+		})
+	}
+
+	// Create the filter to match the document by ID
+	filter := bson.M{"_id": objectID}
+
+	// Attempt to delete the document
+	result, err := collection.DeleteOne(context.Background(), filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to delete the personal note",
+			"message": err.Error(),
+		})
+	}
+
+	// Check if a document was deleted
+	if result.DeletedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "No note found with the given ID",
+		})
+	}
+
+	// Return success response
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Note deleted successfully",
+	})
 }
