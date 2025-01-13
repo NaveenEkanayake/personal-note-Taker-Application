@@ -35,9 +35,8 @@ func main() {
 	fmt.Printf("Connected to MongoDB on port %s\n", PORT)
 
 	app := fiber.New()
-
-	// Setup routes
 	routes.PersonalNoteRoutes(app)
+	routes.PersonalauthRoutes(app)
 
 	// Start the server
 	log.Fatal(app.Listen(fmt.Sprintf(":%s", PORT)))
