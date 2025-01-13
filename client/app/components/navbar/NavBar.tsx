@@ -5,7 +5,11 @@ import Image from "next/image";
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 
-export default function NavBar() {
+interface NavBarProps {
+  setShowLogin: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export default function NavBar({ setShowLogin }: NavBarProps) {
   return (
     <Popover className="bg-transparent border-b-2 border-gray-300 h-24 px-6 flex items-center justify-between">
       <Link href="/">
@@ -24,26 +28,24 @@ export default function NavBar() {
         </div>
       </Link>
       <div className="sm:hidden">
-        <PopoverButton className="inline-flex items-center justify-center rounded-md  p-2 text-gray-400  hover:text-white focus:ring-2 focus:ring-inset">
+        <PopoverButton className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:text-white focus:ring-2 focus:ring-inset">
           <Bars3Icon className="h-6 w-6" aria-hidden="true" />
         </PopoverButton>
       </div>
       <div className="hidden sm:flex gap-4">
         <Link
           href="/"
-          className="text-lg rounded-full px-6 py-2 bg-transparent text-accent border border-accent hover:bg-accent hover:text-white cursor-pointer"
+          className="text-lg rounded-full px-6 py-2 bg-transparent text-accent border border-accent hover:bg-accent hover:text-white cursor-pointer text-center"
         >
           Home
         </Link>
-        <Link
-          href="/login"
+        <button
+          onClick={() => setShowLogin(true)}
           className="text-lg rounded-full px-6 py-2 bg-transparent text-accent border border-accent hover:bg-accent hover:text-white cursor-pointer"
         >
           Login
-        </Link>
+        </button>
       </div>
-
-      {/* Mobile Menu Panel */}
       <PopoverPanel className="fixed inset-y-0 right-0 z-10 w-64 bg-black text-white shadow-lg sm:hidden">
         <div className="p-4 flex flex-col h-full">
           <div className="flex justify-end mb-4">
@@ -58,12 +60,12 @@ export default function NavBar() {
             >
               Home
             </Link>
-            <Link
-              href="/login"
+            <button
+              onClick={() => setShowLogin(true)}
               className="text-lg rounded-full px-6 py-2 bg-transparent text-accent border border-accent hover:bg-accent hover:text-white cursor-pointer"
             >
               Login
-            </Link>
+            </button>
           </nav>
         </div>
       </PopoverPanel>

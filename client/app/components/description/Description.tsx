@@ -1,9 +1,15 @@
 import DescriptionImage from "../../../public/assests/descriptionImage.webp";
 import Image from "next/image";
-import AddnoteBtn from "../Homeaddnotebtn/Addnotebtn";
+import AddnoteBtn from "../homeaddnotebtn/Addnotebtn";
+import { motion } from "framer-motion";
 export default function Description() {
   return (
-    <div className="flex flex-col md:flex-row items-center justify-center my-24 gap-8 md:gap-12 px-4">
+    <motion.div
+      initial={{ opacity: 0, translateY: "100%" }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{ duration: 1.0 }}
+      className="flex flex-col md:flex-row items-center justify-center my-24 gap-8 md:gap-12 px-4"
+    >
       <div className="order-1 md:order-1 flex justify-center">
         <Image
           src={DescriptionImage}
@@ -30,6 +36,6 @@ export default function Description() {
           <AddnoteBtn>Add Note </AddnoteBtn>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
