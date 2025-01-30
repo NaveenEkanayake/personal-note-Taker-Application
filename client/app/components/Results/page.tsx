@@ -1,11 +1,10 @@
 "use client";
 import { useState } from "react";
 import { Input } from "@headlessui/react";
-import NavBar from "../navbar/NavBar";
 import FormAddnoteBtn from "../FormAddButton/AddButton";
+import ResultNavBar from "../resultnavbar/NavBar";
 
 export default function Results() {
-  const [showLogin, setShowLogin] = useState<boolean>(false);
   const [formData, setFormData] = useState({ title: "", content: "" });
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -14,7 +13,7 @@ export default function Results() {
 
   return (
     <>
-      <NavBar setShowLogin={setShowLogin} />
+      <ResultNavBar />
       <div className="max-w-lg mx-auto p-6 sm:p-8 bg-slate-300 mt-24 flex flex-col items-center">
         <h1 className="text-center text-3xl text-slate-500 mb-6">
           Personal Note Form
